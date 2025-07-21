@@ -22,27 +22,43 @@ public with sharing class NextStepBatch implements Database.Batchable<sObject>{
 
     public Database.QueryLocator start(Database.BatchableContext bc){
         // Query for all accounts and return the query locator.
-        return null; // Update null with the query locator
+        System.debug('NextStepBatch sart method called');
+        return Database.getQueryLocator([SELECT Id, Next_Step__c FROM Account WHERE Next_Step__c != 'Batching the next meetings together.']); // Update null with the query locator
     }
     
     public void execute(Database.BatchableContext bc, List<Account> scope){
         final String BATCH_NEXT_STEP = 'Batching the next meetings together.';
+        System.debug('NextStepBatch execute method called' + scope.size());
 
         // Update the Next Step field on each record in the batch scope.
-
+       
         // Loop through the scope account records
-
+        for (Account acc : scope) {
             // Set the Next Step field to 'Batching the next meetings together.'
-
+            acc.Next_Step__c = BATCH_NEXT_STEP;
+        }
         // Update the account records in this batch scope
+        try{
+            update scope;
+        } catch(Exception e) {
+            System.debug('Failed to update accounts in scope' + e.getMessage());
+        }
         
         // Query for all opportunities related to the accounts in this batch scope
+        List<Opportunity> oppsToUpdate = [SELECT Id, NextStep, AccountId FROM Opportunity WHERE AccountId IN :scope];
 
         // Loop through the opportunity records
-
+        for (Opportunity opp : oppsToUpdate) {
             // Set the Next Step field to 'Batching the next meetings together.'
-
+            opp.NextStep = BATCH_NEXT_STEP;
+        }
         // Update the opportunity records
+        try{
+            update oppsToUpdate;
+        } catch(Exception e) {
+            System.debug('Failed to update related opportunities in scope' + e.getMessage());
+        }
+        
 
     }
     
@@ -50,8 +66,12 @@ public with sharing class NextStepBatch implements Database.Batchable<sObject>{
         final List<User> USERS = [SELECT Id, Name, Email FROM User WHERE IsActive = true AND (NOT Email LIKE 'autoproc%')]; // DO NOT CHANGE
 
         // Get the email addresses of all active users
-
-            // Pass the set of active user emails to the sendEmailToActiveUsers method
+        Set<String> userEmails = new Set<String>();
+        for (User u : USERS) {
+            userEmails.add(u.Email);
+        }
+        // Pass the set of active user emails to the sendEmailToActiveUsers method
+        sendEmailToActiveUsers(userEmails);    
     }
 
     // Helper method to send an email to all emails in the set
