@@ -25,33 +25,47 @@ public with sharing class NextStepQueueable implements Queueable{
     // Constructor to accept the accounts
     public NextStepQueueable(Map<Id,Account> accounts) {
         // Store the accounts in a member variable
+        this.accounts = accounts;
     }
 
     // Method to queue the job
     public static void enqueueJob() {
         // Get 10 accounts with Next Step populated
-
+        Map<Id, Account> accounts = new Map<Id, Account> ([SELECT Id, Next_Step__c FROM Account WHERE Next_Step__c != null LIMIT 10]);
         // If there are any accounts, queue the job using System.enqueueJob
+        if(!accounts.isEmpty()) {
+            System.debug('Accounts found: ' + accounts.size());
+            System.enqueueJob(new NextStepQueueable(accounts));
+        }
     }
 
     /*
      * Update/Uncomment the template code to create a method
      * Method to execute the queueable job
      */
-    public static void execute (QueueableContext context) {
+    public void execute (QueueableContext context) {
+        System.debug('NextStepQueueable executed!');
         // Get the accounts from the member variable
-
+        List<Account> accsToUpdate = new List<Account>();
+        for (Account acc : this.accounts.values()) {
             // Remove the Next Step using the helper method
-
+            removeNextStep(acc);
+            accsToUpdate.add(acc);
+        }
         // Update the accounts
+        update accsToUpdate;
 
         // Get the opportunities related to the accounts
-
+        List<Opportunity> oppsToUpdate = [SELECT Id, NextStep, AccountId FROM Opportunity WHERE AccountId IN : this.accounts.keySet()];
+        for (Opportunity opp : oppsToUpdate) {
             // Remove the Next Step using the helper method
-
+            removeNextStep(opp);
+        }
         // Update the opportunities
+        update oppsToUpdate;
 
         // Call the enqueueJob method to queue another job to process more records.
+        enqueueJob();
     }
 
     // Helper method to remove the Next Step
