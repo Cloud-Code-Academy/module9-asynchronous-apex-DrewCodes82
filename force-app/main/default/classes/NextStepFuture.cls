@@ -27,9 +27,21 @@ public with sharing class NextStepFuture {
      * Opportunity Next Step field is a standard field
      * Update the corresponding test class AsynchronousTest and test method nextStepFuture_testUpdateAllNextStep to cover test this method
      */
-    //[public | private ] [static] data_type method_name (input parameters) {
-    //  The body of the method
-    //}
+    @future
+    public static void updateNextStep() {
+      List<Account> accList = [SELECT Id, Next_Step__c FROM Account WHERE Next_Step__c != 'Meeting in the future'];
+      List<Opportunity> oppList = [SELECT Id, NextStep FROM Opportunity WHERE NextStep != 'Meeting in the future' ];
+
+      for (Account acc : accList) {
+        acc.Next_Step__c = 'Meeting in the future';
+      }
+
+      for (Opportunity opp : oppList) {
+        opp.NextStep = 'Meeting in the future';
+      }
+      update accList;
+      update oppList;
+    }
 
     /*
     * Question 2
@@ -41,9 +53,8 @@ public with sharing class NextStepFuture {
     public static void createDealAndUpdateRole() {
         Opportunity bigDeal = new Opportunity();
         insertBigDeal(bigDeal);
-
-        UserRole[] roles = [SELECT Id, Name FROM UserRole WHERE Id = :UserInfo.getUserRoleId() OR Name = 'CRO' LIMIT 1];
-        updateUserRoleName(roles);
+        Map<Id, UserRole> roleMap = new Map<Id, UserRole>([SELECT Id, Name FROM UserRole WHERE Id = :UserInfo.getUserRoleId() OR Name = 'CRO' LIMIT 1]);        
+        updateUserRoleName(new List<Id>(roleMap.keySet()));
     }
 
     // Helper method to insert big deal
@@ -52,25 +63,54 @@ public with sharing class NextStepFuture {
         opp.Name = 'Big Deal';
         opp.StageName = 'Closed Won'; 
         opp.CloseDate = Date.today();
-        
-        insert opp;
+        try{
+            insert opp;
+        } catch (Exception e){
+            System.debug('Failed to insert Opportunity: ' + e.getMessage());
+        }
     }
 
 
     // Helper method to update role name
-    private static void updateUserRoleName(UserRole[] roles){
-        UserRole role;
-        if (roles.isEmpty()) {
-            role = new UserRole();
-            role.portalType = 'None'; 
-            role.CaseAccessForAccountOwner = 'Edit'; 
-            // role.OpportunityAccessForAccountOwner = 'Edit'; //This may need to be uncommented depending on your orgs Organization Wide Defaults(OWD) settings. If you are receiving FIELD_INTEGRITY_EXCEPTION, field integrity exception: unknown (Opportunity access level below organization default): [unknown], uncomment this line.
-        } else {
-            role = roles[0];
+    @future
+    private static void updateUserRoleName(List<Id> roleIds){
+        // Query based on List of Ids in parameter
+        List<UserRole> roles = [SELECT Id, Name FROM UserRole WHERE Id IN :roleIds OR Name = 'CRO'];
+        
+        // Checking if Role with name of CRO already exists
+        Boolean croExists = false;
+
+        for (UserRole role : roles) {
+            if (role.Name == 'CRO') {
+                croExists = true;
+            }
         }
 
-        role.Name = 'CRO';
+        // If at least one role exists, update its name to CRO
+        if (!roles.isEmpty()) {
+            for (UserRole role : roles) {
+                role.Name = 'CRO';
+            }
+            try {
+                update roles;
+            } catch (Exception e) {
+                System.debug('Failed to update UserRoles: ' + e.getMessage());
+            }
+        }
 
-        upsert role;
+        // If no role is named CRO, create a new one
+        if (!croExists) {
+            UserRole newRole = new UserRole();
+            newRole.Name = 'CRO';
+            newRole.portalType = 'None';
+            newRole.CaseAccessForAccountOwner = 'Edit';
+            // role.OpportunityAccessForAccountOwner = 'Edit'; //This may need to be uncommented depending on your orgs Organization Wide Defaults(OWD) settings. If you are receiving FIELD_INTEGRITY_EXCEPTION, field integrity exception: unknown (Opportunity access level below organization default): [unknown], uncomment this line.
+
+            try {
+                insert newRole;
+            } catch (Exception e) {
+                System.debug('Failed to insert new UserRole: ' + e.getMessage());
+            }
+        }
     }
 }
